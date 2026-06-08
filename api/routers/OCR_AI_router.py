@@ -94,6 +94,22 @@ async def input_ocr_config(
 #         return {"success": False, "error": str(e)}
 
 
+@router.get(
+    "/ocr_ai/ws",
+    summary="WebSocket OCR endpoint information",
+)
+async def websocket_ocr_info():
+    """Describe the WebSocket endpoint for Swagger and ReDoc."""
+    return {
+        "success": True,
+        "type": "websocket",
+        "path": "/api/v1/ai/ocr_ai/ws",
+        "url_example": "ws://localhost:8000/api/v1/ai/ocr_ai/ws",
+        "input": "Send image bytes as a binary WebSocket message",
+        "output": "OCR result JSON",
+    }
+
+
 @router.websocket("/ocr_ai/ws")
 async def websocket_ocr(websocket: WebSocket):
     """WebSocket endpoint for real-time OCR prediction"""
