@@ -1,98 +1,71 @@
-# ===== SAFE IMPORT ZONE for PyInstaller =====
-# Các thư viện dùng trong .pyd (api/, backend/) mà PyInstaller không tự detect được.
-# Bao gồm dependencies của Deep_Learning_Tool (phần explicit imports từ .pyi).
+import multiprocessing
+import sys
 
-# --- API / Server ---
-import fastapi
 import uvicorn
 
-# --- Windows API (Single Instance) ---
-import win32event
-import win32api
-import winerror
+from tool.app.core.config import get_config
 
-# --- Data / AI ---
-import numpy
-import pandas
-import cv2
-import torch
-import torch.nn
-import torch.optim
-import torch.utils.data
-from torch.utils.data import DataLoader, Dataset
-import torchvision
-from torchvision import datasets, transforms
-from torchvision.models import resnet18
-from torchinfo import summary
-from ultralytics import YOLO
-import tqdm
-from sklearn.model_selection import train_test_split
-import yaml
 
-# --- Image / Vision ---
-from PIL import Image, ImageTk
-import cvzone
-from cvzone.Utils import putTextRect
+def _ensure_python_39():
+    if sys.version_info[:2] != (3, 9):
+        version = ".".join(str(part) for part in sys.version_info[:3])
+        raise RuntimeError(
+            "This project must run on Python 3.9 because native runtime files "
+            f"are built for cp39-win_amd64. Current Python: {version} at {sys.executable}"
+        )
 
-# --- GUI (Deep_Learning_Tool dùng PyQt5 nội bộ) ---
-from PyQt5 import QtCore, QtGui, QtWidgets, uic
-from PyQt5.QtCore import *
-from PyQt5.QtGui import *
-from PyQt5.QtWidgets import *
 
-# ===== END SAFE IMPORT ZONE =====
+def _prepare_windowed_stdio():
+    if sys.stdout is not None and sys.stderr is not None:
+        return None
 
-import sys, os
-
-# Lấy thư mục chứa file main.py hoặc main.exe
-if getattr(sys, "frozen", False):
-    base_path = os.path.dirname(sys.executable)
-else:
-    base_path = os.path.dirname(os.path.abspath(__file__))
-
-# Fix windowed exe: stdout/stderr là None → uvicorn crash khi gọi sys.stderr.isatty()
-if sys.stdout is None or sys.stderr is None:
-    _log = os.path.join(base_path, "api", "backend", "logs", "console.log")
-    os.makedirs(os.path.dirname(_log), exist_ok=True)
-    _stream = open(_log, "a", encoding="utf-8")
+    log_dir = get_config().logs_dir
+    log_dir.mkdir(parents=True, exist_ok=True)
+    stream = (log_dir / "console.log").open("a", encoding="utf-8")
     if sys.stdout is None:
-        sys.stdout = _stream
+        sys.stdout = stream
     if sys.stderr is None:
-        sys.stderr = _stream
+        sys.stderr = stream
+    return stream
 
-# Flat import — thêm api/ vào sys.path rồi import trực tiếp (không cần __init__.py)
-sys.path.insert(0, os.path.join(base_path, "api"))
-from app import app
 
-if __name__ == "__main__":
-    import multiprocessing
+def _ensure_single_instance() -> bool:
+    try:
+        import win32api
+        import win32event
+        import winerror
+    except Exception:
+        return True
 
-    # --- Windows API (Single Instance) ---
-    import win32event
-    import win32api
-    import winerror
+    mutex = win32event.CreateMutex(
+        None,
+        False,
+        "Global\\AHSO_DRB_OCR_AI_Device_Tool",
+    )
+    return win32api.GetLastError() != winerror.ERROR_ALREADY_EXISTS
 
-    # QUAN TRỌNG: Phải có dòng này khi đóng EXE để tránh spawn vô hạn processes
+
+def main():
     multiprocessing.freeze_support()
+    _ensure_python_39()
+    _prepare_windowed_stdio()
+    if not _ensure_single_instance():
+        return
 
-    # Kiểm tra single instance bằng Mutex
-    # Tạo mutex với tên unique cho app này
-    mutex = win32event.CreateMutex(None, False, "Global\\AHSO_DRB_OCR_AI_Metalcore_API")
-    last_error = win32api.GetLastError()
-
-    if last_error == winerror.ERROR_ALREADY_EXISTS:
-        # Đã có instance đang chạy
-        sys.exit(0)
-
-    import uvicorn
-
-    is_frozen = getattr(sys, "frozen", False)
+    config = get_config()
     uvicorn.run(
-        app if is_frozen else "main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=not is_frozen,
+        "tool.app.main:app",
+        host=config.api_host,
+        port=config.api_port,
+        reload=False,
         log_level="info",
         ws_ping_interval=None,
         ws_ping_timeout=None,
     )
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        sys.exit(0)

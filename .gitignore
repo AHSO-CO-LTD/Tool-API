@@ -1,12 +1,19 @@
 *
 !.gitignore
 
-!/api/
-!/api/**
-!/backend/
-!/backend/**
-!/frontend/
-!/frontend/**
 !/config.json
 !/main.py
 !/requirements.txt
+!/AGENTS.md
+!/README.md
+
+!/docs/
+!/docs/**
+
+!/tool/
+!/tool/**
+
+**/__pycache__/
+**/*.pyc
+/runtime/
+/tool/app/runtime/
